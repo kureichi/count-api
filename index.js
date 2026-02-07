@@ -5,12 +5,23 @@ const { open } = require('sqlite');
 const sqlite3 = require('sqlite3');
 const path = require('path');
 const cors = require('cors');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const dbPath = './data/database.db'; // Path sesuai permintaanmu untuk Railway persistence
+
+try {
+  fs.mkdirSync('./data')
+} catch (err) {
+  if (err.code !== 'EEXIST') {
+    console.error('Error creating directory:', err);
+    throw err;
+  }
+  console.log(`Directory already exists`);
+}
 
 let db;
 
