@@ -16,7 +16,7 @@ const dbConfig = {
 
 let db;
 
-(async () => {
+const initDB = async () => {
     try {
         db = await mysql.createConnection(dbConfig);
         
@@ -30,8 +30,15 @@ let db;
         console.log("Database MySQL Connected & Ready!");
     } catch (err) {
         console.error("Gagal konek database:", err);
+        // klo error, execute lagi setelah 3 detik
+        
+        console.log("Reconnect in 3s...")
+        setTimeout(() => initDB(), 3000)
     }
-})();
+}
+
+// jalanin inisialisasi
+initDB()
 
 app.post('/count/create', async (req, res) => {
     const { code } = req.body;
