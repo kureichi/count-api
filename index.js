@@ -1,71 +1,58 @@
-// code dibuat dengan gemini karena pengen cepet
-
 const express = require('express');
-const { open } = require('sqlite');
-const sqlite3 = require('sqlite3');
-const path = require('path');
+const mysql = require('mysql2/promise');
 const cors = require('cors');
-const fs = require('fs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const dbPath = './data/database.db'; // Path sesuai permintaanmu untuk Railway persistence
-
-try {
-  fs.mkdirSync('./data')
-} catch (err) {
-  if (err.code !== 'EEXIST') {
-    console.error('Error creating directory:', err);
-    throw err;
-  }
-  console.log(`Directory already exists`);
-}
+const dbConfig = {
+    host: process.env.MYSQLHOST || 'localhost',
+    user: process.env.MYSQLUSER || 'root',
+    password: process.env.MYSQLPASSWORD || '',
+    database: process.env.MYSQLDATABASE || 'count_db',
+    port: process.env.MYSQLPORT || 3306
+};
 
 let db;
 
-// Inisialisasi Database
 (async () => {
-    db = await open({
-        filename: dbPath,
-        driver: sqlite3.Database
-    });
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS counts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT NOT NULL,
-            date TEXT NOT NULL
-        )
-    `);
-    console.log("Database ready at " + dbPath);
+    try {
+        db = await mysql.createConnection(dbConfig);
+        
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS counts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                code TEXT NOT NULL,
+                date VARCHAR(255) NOT NULL
+            )
+        `);
+        console.log("Database MySQL Connected & Ready!");
+    } catch (err) {
+        console.error("Gagal konek database:", err);
+    }
 })();
 
-// 1. POST /count/create
 app.post('/count/create', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ statusCode: 400, message: "Field 'code' wajib diisi" });
 
     const date = new Date().toISOString();
-    await db.run('INSERT INTO counts (code, date) VALUES (?, ?)', [code, date]);
+    await db.execute('INSERT INTO counts (code, date) VALUES (?, ?)', [code, date]);
 
     res.json({
         statusCode: 200,
         message: "Sukses membuat data",
-        data: { 
-            code, 
-            date 
-        }
+        data: { code, date }
     });
 });
 
-// 2. GET /count/detail?code=xxx
 app.get('/count/detail', async (req, res) => {
     const { code } = req.query;
     if (!code) return res.status(400).json({ statusCode: 400, message: "Query param 'code' dibutuhkan" });
 
-    const data = await db.get('SELECT code, date FROM counts WHERE code = ?', [code]);
+    const [rows] = await db.execute('SELECT code, date FROM counts WHERE code = ? LIMIT 1', [code]);
+    const data = rows[0];
 
     if (!data) return res.status(404).json({ statusCode: 404, message: "Data tidak ditemukan" });
 
@@ -77,23 +64,22 @@ app.get('/count/detail', async (req, res) => {
 });
 
 app.get('/count', async (req, res) => {
-    const data = await db.get('SELECT * FROM counts');
+    const [rows] = await db.execute('SELECT * FROM counts');
 
     res.json({
         statusCode: 200,
         message: "Sukses mengambil data",
-        data: data
-    })
-})
+        data: rows
+    });
+});
 
-// 3. DELETE /count/delete
 app.delete('/count/delete', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ statusCode: 400, message: "Field 'code' wajib diisi" });
 
-    const result = await db.run('DELETE FROM counts WHERE code = ?', [code]);
+    const [result] = await db.execute('DELETE FROM counts WHERE code = ?', [code]);
 
-    if (result.changes === 0) {
+    if (result.affectedRows === 0) {
         return res.status(404).json({ statusCode: 404, message: "Data tidak ditemukan untuk dihapus" });
     }
 
